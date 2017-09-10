@@ -8,6 +8,13 @@ import java.util.*;
  * by a single column.
  */
 public class Aggregate extends Operator {
+    public DbIterator child;
+    public int afield;
+    public int gfield;
+    public Aggregator.Op aop;
+    public Type computeType;
+    public Aggregator ags;
+    public DbIterator dbIterator;
 
     /**
      * Constructor.  
@@ -23,6 +30,26 @@ public class Aggregate extends Operator {
      */
     public Aggregate(DbIterator child, int afield, int gfield, Aggregator.Op aop) {
         // some code goes here
+        this.child = child;
+        this.afield = afield;
+        this.gfield = gfield;
+        this.aop = aop;
+        this.computeType = child.getTupleDesc().getFieldType(afield);
+        Type gfieldtype = gfield == -1 ? null : child.getTupleDesc().getFieldType(gfield);
+        if (computeType.equals(Type.INT_TYPE)){
+            this.ags = new IntegerAggregator(gfield,gfieldtype,afield,aop);
+        } else {
+            this.ags = new StringAggregator(gfield,gfieldtype,afield,aop);
+        }
+        try {
+            child.open();
+            while (child.hasNext()){
+                this.ags.mergeTupleIntoGroup(child.next());
+            }
+        } catch (Exception e){
+            throw  new IllegalStateException("can't read child");
+        }
+        this.dbIterator = ags.iterator();
     }
 
     public static String nameOfAggregatorOp(Aggregator.Op aop) {
@@ -44,6 +71,7 @@ public class Aggregate extends Operator {
     public void open()
         throws NoSuchElementException, DbException, TransactionAbortedException {
         // some code goes here
+        dbIterator.open();
     }
 
     /**
@@ -56,11 +84,15 @@ public class Aggregate extends Operator {
      */
     protected Tuple fetchNext() throws TransactionAbortedException, DbException {
         // some code goes here
+        if (dbIterator.hasNext()){
+            return dbIterator.next();
+        }
         return null;
     }
 
     public void rewind() throws DbException, TransactionAbortedException {
         // some code goes here
+        dbIterator.rewind();
     }
 
     /**
@@ -76,10 +108,11 @@ public class Aggregate extends Operator {
      */
     public TupleDesc getTupleDesc() {
         // some code goes here
-        return null;
+        return dbIterator.getTupleDesc();
     }
 
     public void close() {
         // some code goes here
+        dbIterator.close();
     }
 }

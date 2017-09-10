@@ -89,6 +89,17 @@ public class HeapFile implements DbFile {
     public void writePage(Page page) throws IOException {
         // some code goes here
         // not necessary for lab1
+        int pagesize = BufferPool.getPageSize();
+        int offset = page.getId().pageNumber()*pagesize;
+        byte[] rawdata = page.getPageData();
+        try {
+            OutputStream out = new FileOutputStream(f,true);
+            out.write(rawdata);
+        } catch (FileNotFoundException e) {
+            throw new IllegalArgumentException("FileNotFoundException");
+        } catch (IOException e){
+            throw new IllegalArgumentException("IOException");
+        }
     }
 
     /**
@@ -104,8 +115,25 @@ public class HeapFile implements DbFile {
     // see DbFile.java for javadocs
     public ArrayList<Page> insertTuple(TransactionId tid, Tuple t)
             throws DbException, IOException, TransactionAbortedException {
+        ArrayList<Page> modified = new ArrayList<>();
+        int numpages = numPages();
+        HeapPage currentpage;
+        for (int i = 0;i<numpages;i++){
+            HeapPageId pid = new HeapPageId(getId(),i);
+            currentpage = (HeapPage) Database.getBufferPool().getPage(tid,pid,Permissions.READ_WRITE);
+            if (currentpage.getNumEmptySlots()>0){
+                currentpage.insertTuple(t);
+                modified.add(currentpage);
+                return modified;
+            }
+        }
+        HeapPageId pid = new HeapPageId(getId(),numpages+1);
+        currentpage = new HeapPage(pid,HeapPage.createEmptyPageData());
+        currentpage.insertTuple(t);
+        modified.add(currentpage);
+        writePage(currentpage);
         // some code goes here
-        return null;
+        return modified;
         // not necessary for lab1
     }
 
@@ -113,7 +141,17 @@ public class HeapFile implements DbFile {
     public Page deleteTuple(TransactionId tid, Tuple t) throws DbException,
             TransactionAbortedException {
         // some code goes here
-        return null;
+        RecordId rid = t.getRecordId();
+        PageId pid = rid.getPageId();
+        HeapPage page =(HeapPage) Database.getBufferPool().getPage(tid,pid,Permissions.READ_WRITE);
+        if (pid.getTableId() == getId()) throw new DbException("not a same table");
+        try {
+            page.deleteTuple(t);
+        } catch (DbException e){
+            throw new DbException("tuple has deleted");
+        }
+
+        return page;
         // not necessary for lab1
     }
 
